@@ -1,0 +1,1919 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>knowledge Sharing</title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/font.css">
+    <link rel="stylesheet" href="css/font-awesome.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100;300;400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100;300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+
+
+    </style>
+</head>
+<body style="font-family: 'Noto Sans TC','Noto Sans SC', sans-serif !important;">
+
+
+    <!--header-->
+<div id="header">
+    <p class="site-logo" href="#">
+       IAM 知識分享
+    </p>
+    <nav role="navigation">
+        <p id="weather-welcome" class="site-weather"></p>
+        <div class="search">
+            <input id="search" type="text" class="searchTerm" placeholder="想找甚麼?">
+            <button type="submit" class="searchButton">
+                <i class="fa fa-search"></i>
+            </button>
+        </div>
+    </nav>
+</div>
+    <!--header-->
+
+<!--    body-->
+    <div class="main-body">
+        <div id="wrapper">
+            <!-- Sidebar -->
+            <div id="sidebar-wrapper">
+                <ul class="sidebar-nav nav-pills nav-stacked" id="menu">
+                    <li><a onclick="mainScreenButtonClick()"><span class="fa-stack fa-lg pull-left"><i class="fa fa-home fa-stack-1x "></i></span>主頁面</a></li>
+                    <li><a id ="side-bar-category" href="#"><span class="fa-stack fa-lg pull-left"><i class="fa fa-folder fa-stack-1x "></i></span>文章分類</a>
+                        <ul id="category-side-bar" class="nav-pills nav-stacked" style="list-style-type:none;">
+                        </ul>
+                    </li>
+                    <li><a onclick="viewArticleInRecycleBin()" href="#"><span class="fa-stack fa-lg pull-left"><i class="fa fa-trash fa-stack-1x "></i></span>文章回收站</a></li>
+                    <li><a onclick="getAllMyComment()"  href="#"><span class="fa-stack fa-lg pull-left"><i class="fa fa-comments fa-stack-1x "></i></span>您的留言</a></li>
+                    <li><a onclick="getAllCategories()" href="#"><span class="fa-stack fa-lg pull-left"><i class="fa fa-tasks fa-stack-1x "></i></span>分類管理</a></li>
+                    <li><a onclick="getUserPermission()" href="#"><span class="fa-stack fa-lg pull-left"><i class="fa fa-user fa-stack-1x "></i></span>權限管理</a></li>
+                    <p>&nbsp;&nbsp;&nbsp;如果有任何問題請發郵件給<a href="mailto:123">Tony<a></p>   
+					<p><script src="/Count_Visitor/count.php"></script></p> 					
+                </ul>
+            </div>
+            <!-- /#sidebar-wrapper -->
+            <!-- Page Content -->
+            <div id="page-content-wrapper"></div>
+            <div id="out_docs" class="googoose-wrapper">
+
+            </div>
+
+    </div>
+    </div>
+<!--body-->
+
+
+
+
+
+</body>
+
+<script>
+
+    //article use
+    var attachmentList = [];
+    var categoryMap = {};
+    var categoryAdded = false;
+    var userPermissionMap = {};
+    var currentSelectedPermission = "";
+
+    //history use
+    var oldAttachmentList = [];
+    var perFileSize = 1572864;
+
+    //upload use
+    var blobToBase64 = function(blob,passIndex, callback) {
+        var reader = new FileReader();
+        reader.onload = function() {
+            var dataUrl = reader.result;
+            var base64 = dataUrl.split(',')[1];
+            callback(base64,passIndex);
+        };
+        reader.readAsDataURL(blob);
+    };
+    function uploadFile (url, blob,name, successCallBack,isImage = false) {
+        var getFileNameAndExt = function (htmlValue) {
+            var fileName = htmlValue.replace(/^.*[\\\/]/, '');
+            var re = /(?:\.([^.]+))?$/;
+            var ext = re.exec(fileName)[1];
+            var filename = fileName.replace("."+ext,"");
+            return [filename,ext];
+        };
+        if (isImage){
+            perFileSize = 10485760;
+        }
+
+        var blobParts = Math.ceil(blob.size / perFileSize);
+
+        let fileName = getFileNameAndExt(name)[0];
+        let fileExt = getFileNameAndExt(name)[1];
+
+
+        let startUploadData = {
+            "p1": fileName,
+            "p2": fileExt,
+            "p3": blobParts
+        };
+
+        let createUploadRequest = getJsonWithRequestWithMethod("startUpload", startUploadData);
+        doAjaxData(createUploadRequest, function (jsonResponse) {
+
+            if (jsonResponse["status"] == 200) {
+
+                let fileId = jsonResponse["data"]["fileId"];
+                uploadPartByPart(blobParts,0,blob,fileId,successCallBack);
+
+            }
+
+
+        });
+    }
+    function uploadPartByPart(totalBlock,index,blob,fileId,okCallBack) {
+        var continueUpload = true;
+
+        if (totalBlock === 1){
+            continueUpload = false;
+        }else {
+            if (index === totalBlock) {
+                okCallBack(fileId);
+                return;
+            }
+        }
+
+        var _blob = blob.slice(index * perFileSize, (index + 1) * perFileSize);
+        blobToBase64(_blob,index, function (base64Data,passIndex) {
+            let fd = {};
+            fd["p1"] = passIndex;
+            fd["p2"] = fileId;
+            fd["p3"] = base64Data;
+            doAjaxData(getJsonWithRequestWithMethod("uploadContent", fd),function (data) {
+                    index = index + 1;
+                    console.log("tot:"+totalBlock + "-index:"+index);
+                    if (continueUpload){
+
+                        uploadPartByPart(totalBlock,index,blob,fileId,okCallBack);
+                    }else {
+                        if (data["status"] != 200){
+                            alert("上傳失敗");
+                            return ;
+                        }
+                        okCallBack(fileId);
+                    }
+
+            });
+        });
+    }
+
+
+    var outputArea = document.getElementById("page-content-wrapper");
+
+    var requestUrl = "./core.php";
+	var fileDownloadUrl = "./REAL_DATA/";
+
+    //prepare main screen data
+    window.onload = function () {
+
+        // setupCategoryData
+        mainScreenButtonClick();
+        initSideBar();
+
+        //add input event on search bar
+        let searchBar = document.getElementById("search");
+        searchBar.addEventListener('input',search);
+
+    }
+
+    //core function
+    function initSideBar() {
+        //category
+        var categoryListTable = document.getElementById("category-side-bar");
+        doAjaxData(getJsonWithRequestWithMethod("getAllCategory"),function (data) {
+           if (data["status"] == 200){
+               categoryListTable.innerHTML = "";
+               var categoryData = data["data"]
+               for (var i = 0;i < categoryData.length;i++){
+                   var id = categoryData[i]["categoryId"];
+                   var name = categoryData[i]["categoryName"];
+
+                   if (i == 0 ){
+                       $("#side-bar-category").attr("onclick","viewArticleByCategoryId("+id+")");
+                   }
+
+                   categoryListTable.innerHTML += ' <li><a onclick="viewArticleByCategoryId(' + id +')"><span class="fa-stack fa-lg pull-left"><i class="fa fa-file fa-stack-1x "></i></span>' + name +'</a></li>'
+
+               }
+           }
+        });
+    }
+    function doAjaxData(jsonString,successFunction) {
+         $.ajax({
+            url: requestUrl,
+            data: jsonString,
+            type: "POST",
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            cache: false,
+            success:successFunction
+        });
+    }
+    function mainScreenButtonClick() {
+
+
+        var weatherWelcome = document.getElementById("weather-welcome");
+
+        //check permission
+        doAjaxData(getJsonWithRequestWithMethod("getSelfPermission"),function (data) {
+
+            if (data["status"] == 200){
+
+                //no permission
+                if (data["data"]["permission"] == "x"){
+
+                    outputArea.innerHTML = '<h1 style="color:#2eb9d4">' + '沒有權限' + '</h1>';
+
+                }else {
+
+                    outputArea.innerHTML = '<h1 style="color:#2eb9d4">' + '最新發文' + '</h1>';
+
+                    //get welcome message
+                    doAjaxData(getJsonWithRequestWithMethod("selfStatistic"),function (data) {
+
+                        if (data["status"] == 200){
+
+                            var selfNickName  = data["data"]["selfName"];
+                            var totalAmount = data["data"]["totalAmount"];
+                            var selfAmount = data["data"]["selfAmount"];
+                            var selfCommentAmount = data["data"]["selfCommentAmount"];
+
+                            outputArea.innerHTML = '<div class="welcome-title"><h1>歡迎回來,' + selfNickName + '</h1>' +
+                                '<button onclick="addArticle()" class="first-btn" name="asdasd"><i class="fa fa-plus"></i>新增文章</button>' +
+                                ' <button onclick="editProfile()"><i class="fa fa-picture-o"></i>更換頭像</button></div><br/>' +
+                                '<div class="main-count-span"><h2>系統累計發文:'+ totalAmount +'</h2>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' +
+                                '<h2>您的發文:' + selfAmount + ' </h2>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' +
+                                '<h2>您的留言數:' + selfCommentAmount+ '</h2></div><br/><br/>'+ outputArea.innerHTML;
+                            setupNowWeatherInfo(function (weather) {
+                                weatherWelcome.innerText = "您好" + selfNickName + "," + weather;
+                            });
+
+
+                        }
+
+                    });
+
+                    //get recent article
+                    doAjaxData(getJsonWithRequestWithMethod("getRecentArticle"),function (data) {
+
+                        if (data["status"] == 200){
+                            var articleModels = data["data"];
+                            var outputHTMLText = '<ul class="aticle-display-table">';
+                            for (var i = 0;i < articleModels.length;i++){
+                                var cellHTML = "";
+                                 var articleModel = articleModels[i];
+                                 var ownerImagePath = requestUrl + "?df="  + articleModel["articleOwnerImageName"];
+                                // var title = articleModel["articleId"];
+                                // var commentCount = articleModel["commentCount"]
+
+                                //</div>
+                                cellHTML += ' <li class="aticle-cell">';
+                                cellHTML += '<div onclick="viewArticle(' + articleModel['articleId'] + ')" class="cell-right">';
+                                cellHTML += '<div><h1>' + articleModel["articleTitle"] + ' </h1><div>';
+                                cellHTML += '<div><p>分類:'+ articleModel["categoryTitle"] +'</p><p><i class="fa fa-comment"></i>留言:' + articleModel["commentCount"] + '</p><p>發文日期:' + articleModel["articleDate"] + '</p><p>作者:' + articleModel["articleOwnerName"] + '</p></div>';
+                                cellHTML += '</div></li>';
+                                outputHTMLText += cellHTML;
+
+                            }
+
+                            outputHTMLText += '</ul>';
+
+                            outputArea.innerHTML += outputHTMLText;
+
+                        }
+
+                    });
+
+                }
+
+            }
+
+        });
+
+    }
+    function getJsonWithRequestWithMethod(methodName,data = {}) {
+        var jsonObject = {
+            "action":methodName,
+            "data":data
+        };
+
+        return JSON.stringify(jsonObject);
+
+    }
+    function validateImage(tag){
+        var image =document.getElementById(tag).value;
+
+        if(image!=''){
+            var checkimg = image.toLowerCase();
+            if (!checkimg.match(/(\.jpg|\.png|\.JPG|\.PNG|\.gif|\.GIF|\.jpeg|\.JPEG)$/)){
+                document.getElementById(tag).focus();
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+
+    //user management
+    function getUserPermission(permission = 'x'){
+
+        doAjaxData(getJsonWithRequestWithMethod("getAllUserPermission"),function (response){
+
+            if (response["status"] == 200){
+
+                outputArea.innerHTML = " <h1>權限管理</h1>";
+
+                outputArea.innerHTML += '<div class="permission-control-panel"><div class="group-display"><ul>' +
+                    '<li><button onclick="userPermissionListButtonClick(\'x\')" class="group-selected"><i class="fa fa-user-circle"></i>沒有權限</button></li>' +
+                    '<li><button onclick="userPermissionListButtonClick(\'r\')" class="group-unselect"><i class="fa fa-user-circle"></i>只讀用戶</button></li>' +
+                    '<li><button onclick="userPermissionListButtonClick(\'rw\')" class="group-unselect"><i class="fa fa-user-circle"></i>普通讀寫用戶</button></li>' +
+                    '<li><button onclick="userPermissionListButtonClick(\'rw+\')" class="group-unselect"><i class="fa fa-user-circle"></i>高級讀寫用戶</button></li>' +
+                    '<li><button onclick="userPermissionListButtonClick(\'s\')" class="group-unselect"><i class="fa fa-user-circle"></i>管理員</button></li>' +
+                    '</ul>' +
+                    '</div>' +
+                    '<div class="user-display">' +
+                    '<h1 id="permissionMsg" >可讀用戶----------點擊名字移除所選的組</h1>' +
+                    '<ul id="permissionList" class="display-user-table">' +
+                    '</ul>' +
+                    '</div>' +
+                    '</div>';
+
+                outputArea.innerHTML += '<div class="content-content-2"> <input id="user-search" class="search-username" placeholder="請輸入用戶名"></input> <h1>點擊名字加入所選的組</h1></div><div class="username_display"><ul id="user-list-search" class="username-table">';
+                outputArea.innerHTML += '</ul></div>';
+
+                userPermissionMap = response["data"];
+
+                userPermissionListButtonClick(permission);
+
+                let userSearch = document.getElementById("user-search");
+                userSearch.oninput = function (){
+                    searchUsername();
+                };
+                // userSearch.addEventListener('input',searchUsername());
+
+
+            }else {
+                outputArea.innerHTML = '<h1>沒有權限</h1>';
+            }
+
+
+        });
+
+    }
+    function userPermissionListButtonClick(permission){
+
+        currentSelectedPermission = permission;
+
+        let msg = '沒有權限用戶';
+
+        if (permission == 's'){
+            msg = '管理員----------點擊名字移除所選的組';
+        }else if(permission == 'r'){
+            msg = '只讀用戶----------點擊名字移除所選的組';
+        }else if(permission == 'rw'){
+            msg = '普通讀寫用戶----------點擊名字移除所選的組';
+        }else if(permission == 'rw+'){
+            msg = '高級讀寫用戶----------點擊名字移除所選的組';
+        }
+
+        $("#permissionMsg").text(msg);
+        let userList = document.getElementById("permissionList");
+
+        let userData = userPermissionMap[permission];
+        let userHTML = "";
+
+        for (let i = 0; i < userData.length; i++) {
+            let userModel = userData[i];
+            userHTML += ' <li><button onclick="movePermissionToNoPermission(' + userModel["userId"] + ')">' + userModel["adName"] + '</button></li>';
+        }
+
+        userList.innerHTML = userHTML;
+
+
+    }
+    function movePermissionToNoPermission(userId){
+
+        let ask = confirm("確定要移除用戶？");
+        if (!ask){
+            return;
+        }
+
+        if (currentSelectedPermission == 's' && userPermissionMap['s'].length == 1){
+            alert("必須保持一位管理員");
+            return ;
+        }
+
+        let data = {
+            "p1":userId,
+            "p2":'x'
+        }
+
+        doAjaxData(getJsonWithRequestWithMethod("modifyUserPermission",data),function (response){
+
+            if (response["status"] == 200){
+                //alert("增加成功");
+                getUserPermission(currentSelectedPermission);
+            }else {
+                alert("增加失敗");
+            }
+
+        });
+
+    }
+    function givePermission(userId){
+
+        let data = {
+            "p1":userId,
+            "p2":currentSelectedPermission
+        }
+
+        doAjaxData(getJsonWithRequestWithMethod("modifyUserPermission",data),function (response){
+
+            if (response["status"] == 200){
+                getUserPermission(currentSelectedPermission);
+            }else {
+                alert("增加失敗");
+            }
+
+        });
+
+
+    }
+    function searchUsername(){
+
+
+        let keyword = document.getElementById("user-search").value;
+
+        if (keyword.length == 0){
+            return;
+        }
+
+        let data ={
+            "p1":keyword
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("searchUsername",data),function (response) {
+            let display = document.getElementById("user-list-search");
+            if (response["status"] == 200){
+                let userData = response["data"];
+                let userHTML = '';
+                for (let i = 0; i < userData.length; i++) {
+                    let userModel = userData[i];
+                    userHTML += ' <li><button onclick="givePermission(' + userModel['userId'] + ')" >' + userModel["adName"] + '</button></li>';
+                }
+
+                display.innerHTML = userHTML;
+            }else {
+                display.innerHTML = "";
+            }
+
+        });
+
+
+    }
+
+
+    //view buuton
+    function viewArticleHistory(articleId) {
+
+        let data = {
+            "p1":articleId
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("getHistoryVersionByArticleId",data),function (response) {
+
+            if (response["status"] == 200){
+
+                let historyModel = response["data"];
+
+                outputArea.innerHTML = ' <div class="content-function-bar"><button onclick="viewArticle(' + articleId+ ')" class="back"><i class="fa fa-arrow-left"></i>返回</button></div>';
+                outputArea.innerHTML += '<div class="content-title"><h1>過往版本:<h1 style="color: #2eb9d4">' + historyModel["articleTitle"] + '</h1></h1></div>';
+
+                let historyHTML = '<ul class="aticle-display-table">';
+                let versionModels = historyModel["versions"];
+
+                for (let i = 0; i < versionModels.length; i++) {
+
+                    let version = versionModels[i];
+
+                    historyHTML += '<li onclick="viewHistoryById(' + version["versionId"] + ')" class="aticle-cell">' +
+                        '<div class="cell-right">' +
+                        '<h1>' + version["versionTitle"] + '</h1>' +
+                        '<div class="cell-buttom"><p style="margin-left: 0"><i class="fa fa-comment"></i>留言:' + version["commentCount"] + '</p><p>版本日期:' + version["versionDate"] + '</p><p>作者:' + version["modifierName"] + '</p></div>' +
+                        '</div>' +
+                        '</li>';
+
+                }
+
+                historyHTML += '</ul>';
+                outputArea.innerHTML += historyHTML;
+
+
+
+            }else if(response["status"] == 201){
+                alert("沒有記錄");
+            }else{
+			    alert("沒有權限");
+			}
+
+        })
+
+    }
+    function viewHistoryById(historyId){
+
+        let data = {
+            "p1":historyId
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("getHistoryVersionDetailByHistoryId",data),function (response) {
+
+            if (response["status"] == 200){
+
+                let historyModel= response["data"];
+
+                outputArea.innerHTML = ' <div class="content-overflow"><div class="content-function-bar"><p class="view-title">修改時間:2020年6月20日</p><button onclick="viewArticle(' + historyModel['articleId'] + ')" class="modify docnone"><i class="fa fa-backward"></i>返回上一頁</button>&nbsp&nbsp<button onclick="outDocs()" class="modify docnone"><i class="fa fa-download"></i>下載Docs</button></div></div>';
+                outputArea.innerHTML += '<div class="content-title"><h2>作者:</h2><h2 class="gray-h2">' + historyModel["ownerNickName"] + '</h2></div>';
+                outputArea.innerHTML += ' <div class="content-title"><h2>標題:</h2><h2 class="gray-h2">' + historyModel["historyTitle"] + '</h2></div>';
+                outputArea.innerHTML += '<div class="content-title">' +
+                    '<h2>分類:</h2>' +
+                    '<h2 class="gray-h2">' + historyModel["categoryTitle"] + '</h2>' +
+                    '</div>';
+
+                outputArea.innerHTML += '<div class="content-content-2">' +
+                    '<h2>內容:</h2>' +
+                    '<div class="content-content-content">' +
+                    historyModel["historyDescription"]+
+                    '</div>' +
+                    '</div>';
+
+
+                let comments = historyModel["comments"];
+                let temp = '<div class="content-comment"><h2>留言:</h2><ul class="comment-display-table">';
+                for (let i = 0; i < comments.length; i++) {
+                    let comment = comments[i];
+                    temp += '<li>' +
+                        '<div class="cell-right">' +
+                        '<p class="cell-description-comment">' + comment["commentDescription"] + '</p>'+
+                        '<p>' + comment["commentDate"] + '</p>' +
+                        '</div>' +
+                        '</li>';
+                }
+
+                if (comments.length == 0){
+                    temp = "<h1>沒有留言</h1>"
+                }
+
+                outputArea.innerHTML += temp +'</ul></div>';
+
+                let componentIds = historyModel["componentIds"];
+				let componentsName = historyModel["componentsName"];
+                let componentHTML = '<div id="attachment" class="content-attachment-add docnone"><h2>附件:</h2>';
+                for (let i = 0; i < componentIds.length; i++) {
+				    let fileExt = componentsName[i].split(".")[1];
+                    componentHTML += '<a href="' + fileDownloadUrl + componentIds[i] + "." + fileExt + '" download="' + componentsName[i] +'">' +
+                        '<div id="file-wrapper" class="file-wrapper">' +
+                        '<div class="i-tag-wrapper">' +
+                        '<i class="fa fa-file display-item"></i>' +
+                        '<p>' + historyModel["componentsName"][i] + '</p>' +
+                        '</div>' +
+                        '</div>' +
+                        '</a>';
+                }
+
+                if (componentIds.length == 0){
+                    componentHTML += '<h2 class="docnone">沒有附件</h2>';
+                }
+
+
+                componentHTML += ' </div>';
+
+                outputArea.innerHTML += componentHTML;
+
+
+
+
+            }else {
+                alert("permission");
+            }
+
+        });
+
+
+    }
+
+    //view
+    function editProfile() {
+
+        doAjaxData(getJsonWithRequestWithMethod("getSelfIcon"),function (data){
+
+            if (data["status"] === 200){
+                outputArea.innerHTML = '<div class="content-function-bar"><button onclick="profileBack2Main()" class="back"><i class="fa fa-arrow-left"></i>返回</button></div><div class="content-title"><h1>更換頭像和簡稱</h1></div><div class="icon-image"><img id="icon-display" src="image/user.jpg" alt=""></div><div class="content-content"><input type="text" id="profile-nickname" placeholder="請輸入你的簡稱"><input  id="iconFile" type="file"></div><br><div class="content-content"><div class="content-function-bar"><button onclick="confirmProfile()" class="confirm">確認更改</button></div></div>';
+                let fileId = data["data"]["imageFileId"];
+                $("#icon-display").attr("src",requestUrl + "?df=" + fileId);
+                $("#icon-display").attr("etag",fileId);
+
+                $('#iconFile').on('change', function (e) {
+                    if (!validateImage("iconFile")){
+                        alert("不是圖片");
+                        editProfile();
+                        return;
+                    }
+                    var file = e.target.files[0];
+                    let htmlValue = document.getElementById("iconFile");
+                    uploadFile(requestUrl, file,htmlValue.value, function (fileId) {
+                        $("#icon-display").attr("src",requestUrl + "?df=" + fileId);
+                        $("#icon-display").attr("etag",fileId);
+                    });
+                });
+
+            }else {
+                alert("開啟失敗,檢查數據庫");
+            }
+
+        });
+
+    }
+    function addArticle() {
+        attachmentList = [];
+        categoryMap = {};
+        doAjaxData(getJsonWithRequestWithMethod("getAllCategory"),function (data){
+
+            if (data["status"] != 200){
+                alert("加載失敗");
+                addArticle2Main();
+            }
+            categoryMap = data["data"];
+            let selections = "";
+            for (let i = 0; i < categoryMap.length; i++) {
+                categoryMap[data["data"][i]["categoryName"]] = data["data"][i]["categoryId"];
+                selections += '<option value="'+ data["data"][i]["categoryName"] +'">';
+            }
+
+            outputArea.innerHTML = '<div id="upload-text" style="display: none;">放手上傳</div' +
+                '><div id="blur-layer"><div class="content-function-bar"><div><button onclick="submitButtonClick()" class="modify">' +
+                '<i class="fa fa-plus"></i>增加頁面</button><button onclick="addArticle2Main()" class="remove"' +
+                '><i class="fa fa-times"></i>取消頁面</button></div></div><div class="content-title"><h2>標題:</h2>' +
+                '<input style="margin-left: 15px;width:80vh" type="text" id="head-textarea"></input></div><div class="content-title"><h2>分類:&nbsp&nbsp&nbsp&nbsp</h2><input id="categoryList" list="browsers"><datalist id="browsers">' + selections +'</datalist></div><div class="content-content"><h2>內容:</h2>' +
+                '<form style="margin-left: 15px" method="GET"><textarea style="font-size: 20px !important;" name="asd" id="mytextarea"></textarea>' +
+                '</form></div><br><br><br><br><div id="attachment" class="content-attachment-add"><h2>拖入上傳</h2><h2>附件:</h2>' +
+                '<div id="attachment-wrapper" class="file-wrapper">' +
+                '</div></div>';
+            var oDragWrap = document.getElementById("wrapper");
+            var wrapper = document.getElementById("page-content-wrapper");
+            var displayText = document.getElementById("upload-text");
+            var blurLayer = document.getElementById("blur-layer");
+
+            oDragWrap.addEventListener(
+                "dragleave",
+                function(e) {
+                    // dragleaveHandler(e);
+                    e.preventDefault()
+                    wrapper.setAttribute("style","");
+                    displayText.setAttribute("style","display:none");
+                    blurLayer.setAttribute("style","");
+                },
+                false
+            );
+
+            oDragWrap.addEventListener(
+                "drop",
+                function(e) {
+                    // dragleaveHandler(e);
+                    e.preventDefault()
+                    wrapper.setAttribute("style","");
+                    blurLayer.setAttribute("style","");
+                    displayText.setAttribute("style","display:none");
+                },
+                false
+            );
+
+            oDragWrap.addEventListener(
+                "dragenter",
+                function(e) {
+                    // dragleaveHandler(e);
+                    e.preventDefault()
+                    wrapper.setAttribute("style","");
+                    blurLayer.setAttribute("style","");
+                    displayText.setAttribute("style","display:none");
+                },
+                false
+            );
+
+            oDragWrap.addEventListener(
+                "dragover",
+                function(e) {
+                    // dragleaveHandler(e);
+                    e.preventDefault()
+                    wrapper.setAttribute("style","border:10px dotted #2eb9d4;");
+                    blurLayer.setAttribute("style","filter: blur(5px);");
+                    displayText.setAttribute("style","font-size: 30px;font-family: 'Noto Sans TC', sans-serif;");
+                },
+                false
+            );
+
+            var box = document.getElementById('wrapper');
+            box.addEventListener("drop",
+                function(e) {
+                    //取消默认浏览器拖拽效果
+                    e.preventDefault();
+                    var files = [];
+                    [].forEach.call(e.dataTransfer.files, function(file) {
+                        files.push(file);
+                    },false);
+
+                    for (let i = 0; i < files.length; i++) {
+                        let file = files[i];
+                        uploadFile(requestUrl,file,file.name,function (fileId) {
+                            //<div class="i-tag-wrapper"><button><i class="fa fa-times"></i></button><i class="fa fa-film display-item"></i><p>asdsdasdasd</p></div></div>
+                            var attachmentOutputArea = document.getElementById("attachment-wrapper");
+                            attachmentList.push(fileId);
+                            attachmentOutputArea.innerHTML = attachmentOutputArea.innerHTML + '<div id="' + fileId + '" class="i-tag-wrapper"><button onclick=\'removeAttachment("' + fileId +'")\'><i class="fa fa-times"></i></button><i class="fa fa-file display-item"></i><p>'+ file.name +'</p></div></div>';
+
+                        });
+                    }
+
+                },
+                false);
+
+//editor
+            tinymce.init({
+                selector: '#mytextarea',
+                width : 1200,
+                height: 470,
+                menubar: true,
+                plugins: [
+                    'advlist autolink lists link image charmap print preview anchor',
+                    'searchreplace visualblocks fullscreen',
+                    'insertdatetime media table contextmenu code',
+                    'wordcount textcolor',
+                    "powerpaste"
+                ],
+                toolbar: 'undo redo | insert | styleselect | bold italic formatpainter permanentpen pageembed forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image |  code ',
+                toolbar_drawer: 'sliding',
+                permanentpen_properties: {
+                    fontname: 'arial,helvetica,sans-serif',
+                    forecolor: '#FF0000',
+                    fontsize: '50pt',
+                    hilitecolor: '',
+                    bold: true,
+                    italic: false,
+                    strikethrough: false,
+                    underline: false
+                },
+                table_toolbar: "tableprops cellprops tabledelete | tableinsertrowbefore tableinsertrowafter tabledeleterow | tableinsertcolbefore tableinsertcolafter tabledeletecol",
+                powerpaste_allow_local_images: true,
+                powerpaste_word_import: 'prompt',
+                powerpaste_html_import: 'prompt',
+                spellchecker_language: 'en',
+                spellchecker_dialog: true,
+                branding: false,
+                paste_data_images: true,
+                images_upload_handler: function (blobInfo, success, failure) {
+                    // no upload, just return the blobInfo.blob() as base64 data
+                    // alert(blobInfo.blob());
+                    // success("data:" + blobInfo.blob().type + ";base64," + blobInfo.base64());
+
+
+                   var id =  function create_UUID(){
+                          var dt = new Date().getTime();
+                              var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                                  var r = (dt + Math.random()*16)%16 | 0;
+                                  dt = Math.floor(dt/16);
+                                  return (c=='x' ? r :(r&0x3|0x8)).toString(16);
+                              });
+                              return uuid;
+                          }
+      
+                    let filename = id() + ".png";
+
+                    uploadFile(requestUrl,blobInfo.blob(),filename,function (fileId){
+					
+					 
+
+                        let imageUrl = fileDownloadUrl + fileId + ".png";
+                        success(imageUrl);
+
+                    },false);
+                    
+                }
+            });
+        });
+
+    }
+
+
+    //profile
+    function profileBack2Main() {
+        mainScreenButtonClick();
+    }
+    function confirmProfile() {
+
+        let nickName =$("#profile-nickname").val();
+        if (nickName.length === 0){
+            alert("簡稱不能為空");
+            return;
+        }
+
+        let nickNameData = {
+            "p1":nickName
+        };
+
+
+        //change self icon image
+        let fileId = $("#icon-display").attr("etag");
+        if (fileId.length === 32){
+
+            let iconImageFileId = {
+                "p1":fileId
+            };
+
+            doAjaxData(getJsonWithRequestWithMethod("changeSelfIconImage",iconImageFileId),function (){
+
+                //change nickName
+                doAjaxData(getJsonWithRequestWithMethod("changeSelfNickName",nickNameData),function (data){
+
+                    if(data["status"] === 200){
+                        alert("修改完成");
+                    }else {
+                        alert("修改  失敗");
+                    }
+                    profileBack2Main();
+                });
+
+            });
+
+        }else {
+
+            //change nickName
+            doAjaxData(getJsonWithRequestWithMethod("changeSelfNickName",nickNameData),function (data){
+
+                if(data["status"] === 200){
+                    alert("修改完成");
+                }else {
+                    alert("修改  失敗");
+                }
+                profileBack2Main();
+            });
+
+        }
+
+
+
+
+
+    }
+
+    //article
+    function addArticle2Main(){
+        location.reload();
+    }
+    function removeAttachment(fileId){
+
+        let data = {
+            "p1":fileId
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("removeComponent",data),function (data) {
+
+            if (data["status"] == 200){
+
+                var button = document.getElementById(fileId);
+                button.remove();
+                let index = attachmentList.indexOf(fileId);
+                if (index > -1) {
+                    attachmentList.splice(index, 1);
+                }
+
+            }else {
+                alert("移除失敗");
+            }
+
+        })
+
+
+    }
+    function submitButtonClick(){
+
+        let headerTitle = document.getElementById("head-textarea").value;
+        let categoryListId = categoryMap[document.getElementById("categoryList").value];
+        let content = tinyMCE.activeEditor.getContent();
+        let componentIds = attachmentList;
+
+        if (headerTitle.length < 1){
+            alert("標題不能為空");
+            return;
+        }
+
+        if (categoryListId === undefined){
+            alert("分類為空或不存在");
+            return;
+        }
+
+        if (content.length < 1){
+            alert("內容不能為空");
+            return;
+        }
+
+
+
+        let data = {
+            "p1":headerTitle,
+            "p2":content,
+            "p3":componentIds,
+            "p4":categoryListId
+        }
+
+
+        doAjaxData(getJsonWithRequestWithMethod("addArticle",data),function (jsonData){
+
+            if (jsonData["status"] === 200) {
+                addArticle2Main();
+            }else if(jsonData["status"] == 403){
+                alert("沒有權限");
+            }else{
+			 alert("文章增加失敗");
+			}
+
+        });
+
+
+
+    }
+    function viewArticle(id,from = "mainScreenButtonClick()"){
+        let data = {
+            "p1":id
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("getArticle",data),function (response) {
+
+            if (response["status"] == 200){
+
+                outputArea.innerHTML = "";
+                let article = response["data"];
+
+                outputArea.innerHTML += '<div class="content-overflow">' +
+                    '<div class="content-function-bar"><p class="view-title">最後修改時間:'+ article["lastModifyTime"] +'</p>' +
+                    '<button onclick="' + from + '" class="back docnone"><i class="fa fa-backward"></i>返回上一頁</button>&nbsp;&nbsp;<button onclick="change2EditArticle(' + article["articleId"] + ')" class="modify docnone"><i class="fa fa-pencil"' +
+                    '></i>編輯頁面</button><button onclick="move2Bin(' + article["articleId"] + ',\''+ from + '\')" class="remove docnone"><i class="fa fa-times"' +
+                    '></i>刪除頁面</button><button onclick="viewArticleHistory(' + article["articleId"] + ')" class="remove version docnone"><i class="fa fa-repeat">' +
+                    '</i>過往版本</button>&nbsp;&nbsp;' +
+                    '<button onclick="outDocs()" class="modify docnone"><i class="fa fa-download"></i>下載Docs</button>&nbsp;&nbsp;' +
+                    '<button onclick="sharePages(' + article["articleId"] + ')" class="modify docnone"><i class="fa fa-share"></i>分享頁面</button></div>' +
+                    '</div>'
+
+                outputArea.innerHTML += ' <div class="content-title">' +
+                    '<h2>作者:</h2>' +
+                    '<p class="gray-h2">' + article["ownerName"] + '</p>' +
+                    '</div>';
+
+                outputArea.innerHTML += '<div class="content-title">' +
+                    '<h2>標題:</h2>' +
+                    '<p class="gray-h2">' + article["articleTitle"] + '</p>' +
+                    '</div>';
+
+                outputArea.innerHTML += '<div class="content-title">' +
+                    '<h2>分類:</h2>' +
+                    '<p class="gray-h2">' + article["categoryName"] + '</p>' +
+                    '</div>';
+
+                outputArea.innerHTML += '<div class="content-content-2">' +
+                    '<h2>內容:</h2>' +
+                    '<div class="content-content-content">' +
+                    article["description"]+
+                    '</div>' +
+                    '</div>';
+
+
+                let componentIds = article["componentIds"];
+				let componentsName = article["componentsName"];
+                let componentHTML = '<div id="attachment" class="content-attachment-add docnone"><h2 class="docnone">附件:</h2>';
+                for (let i = 0; i < componentIds.length; i++) {
+				    let fileExt = componentsName[i].split(".");
+				    fileExt = fileExt[fileExt.length - 1];
+                    componentHTML += '<a href="' + fileDownloadUrl + componentIds[i] + "." + fileExt + '" download="' + componentsName[i] + '">' +
+                        '<div id="file-wrapper" class="file-wrapper">' +
+                        '<div class="i-tag-wrapper">' +
+                        '<i class="fa fa-film display-item"></i>' +
+                        '<p>' + article["componentsName"][i] + '</p>' +
+                        '</div>' +
+                        '</div>' +
+                        '</a>';
+                }
+
+                if (componentIds.length == 0){
+                    componentHTML += '<h2 class="docnone">沒有附件</h2>';
+                }
+
+
+                componentHTML += ' </div>';
+
+                outputArea.innerHTML += componentHTML;
+
+
+                let comments = article["comments"];
+                let temp = '<div class="content-comment"><h2>留言:</h2><ul class="comment-display-table">';
+                for (let i = 0; i < comments.length; i++) {
+                    let comment = comments[i];
+                    temp += '<li>' +
+                        '<div class="cell-right">' +
+                        '<h1 class="cell-description-comment">' + comment["commentDescription"] + '</h1>'+
+                        '<p>留言日期:' + comment["commentDate"] + '</p>' +
+                        '<p>留言人:' + comment["commentOwnerName"] + '</p>' +
+                        '</div>' +
+                        '</li>';
+                }
+
+                if (comments.length == 0){
+                    temp = "<h1>沒有留言</h1>"
+                }
+
+                outputArea.innerHTML += temp +'</ul></div>';
+
+                outputArea.innerHTML += '<div class="content-title docnone">' +
+                    '<h2 class="docnone">你的留言:</h2>' +
+                    '<textarea id="article-comment"></textarea>' +
+                    '</div>' +
+                    '<button onclick="addComment2Article(' + article["articleId"] + ')" class="submit-comment docnone"><i class="fa fa-check"></i>確認提交</button>';
+
+            }else {
+                alert("請求失敗");
+            }
+
+        });
+
+    }
+    function change2EditArticle(articleId){
+
+        let requestData = {
+            "p1":articleId
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("getAllCategory"),function (data){
+
+            if (data["status"] != 200){
+                alert("加載失敗");
+                addArticle2Main();
+            }
+            categoryMap = data["data"];
+            let selections = "";
+            for (let i = 0; i < categoryMap.length; i++) {
+                categoryMap[data["data"][i]["categoryName"]] = data["data"][i]["categoryId"];
+                selections += '<option value="'+ data["data"][i]["categoryName"] +'">';
+            }
+
+
+        doAjaxData(getJsonWithRequestWithMethod("getArticle",requestData),function (response) {
+
+            if (response["status"] == 200){
+                oldAttachmentList = [];
+                let articleModel = response["data"];
+
+
+                //prepare components
+                let componentHTML = "";
+
+                for (let i = 0; i < articleModel["componentsName"].length; i++) {
+                    let componentId = articleModel["componentIds"][i];
+                    let componentName = articleModel["componentsName"][i];
+
+                    oldAttachmentList.push(componentId);
+                    componentHTML += '<div id="' + componentId + '" class="i-tag-wrapper"><button eid="' + componentId + '" onclick=\'removeOldAttachment(this)\'><i class="fa fa-times"></i></button><i class="fa fa-file display-item"></i><p>'+ componentName +'</p></div>';
+
+                }
+
+
+
+                outputArea.innerHTML = '<div id="upload-text" style="display: none;">放手上傳</div>' +
+                    '<div id="blur-layer"><div class="content-function-bar"><div><button onclick="updateArticle(' + articleId + ')" class="modify"><i class="fa fa-plus"></i>確認修改</button>'+
+                    '<button onclick="ReloadAndBack2ViewArticle(' + articleId + ')" class="remove"><i class="fa fa-times"></i>取消修改</button></div></div>' +
+                    '<div class="content-title"><h2>標題:</h2><input style="margin-left: 15px;width:80vh" id="head-textarea" value="' + articleModel["articleTitle"]  + '" >'+ '</div>' +
+                    '<div class="content-title">' +
+                    '<h2>分類:&nbsp&nbsp&nbsp&nbsp'+ '<input id="modifyCategoryList" value="'+ articleModel["categoryName"] +'" list="browsers"><datalist id="browsers">' + selections +'</datalist>' +'</h2>' +
+                    '</div>' +
+                    '<div class="content-content"><h2>內容:</h2><form style="margin-left: 15px" method="GET">' +
+                    '<textarea name="asd" id="mytextarea">' + articleModel["description"] + '</textarea></form></div><br><br><br><br>' +
+                    '<div id="attachment" class="content-attachment-add"><h2>拖入上傳</h2><h2>附件:</h2><div id="attachment-wrapper" class="file-wrapper">'+
+                      componentHTML +'</div></div>';
+
+                var oDragWrap = document.getElementById("wrapper");
+                var wrapper = document.getElementById("page-content-wrapper");
+                var displayText = document.getElementById("upload-text");
+                var blurLayer = document.getElementById("blur-layer");
+
+
+                oDragWrap.addEventListener(
+                    "dragleave",
+                    function(e) {
+                        // dragleaveHandler(e);
+                        e.preventDefault()
+                        wrapper.setAttribute("style","");
+                        displayText.setAttribute("style","display:none");
+                        blurLayer.setAttribute("style","");
+                    },
+                    false
+                );
+
+                oDragWrap.addEventListener(
+                    "drop",
+                    function(e) {
+                        // dragleaveHandler(e);
+                        e.preventDefault()
+                        wrapper.setAttribute("style","");
+                        blurLayer.setAttribute("style","");
+                        displayText.setAttribute("style","display:none");
+                    },
+                    false
+                );
+
+                oDragWrap.addEventListener(
+                    "dragenter",
+                    function(e) {
+                        // dragleaveHandler(e);
+                        e.preventDefault()
+                        wrapper.setAttribute("style","");
+                        blurLayer.setAttribute("style","");
+                        displayText.setAttribute("style","display:none");
+                    },
+                    false
+                );
+
+                oDragWrap.addEventListener(
+                    "dragover",
+                    function(e) {
+                        // dragleaveHandler(e);
+                        e.preventDefault()
+                        wrapper.setAttribute("style","border:10px dotted #2eb9d4;");
+                        blurLayer.setAttribute("style","filter: blur(5px);");
+                        displayText.setAttribute("style","font-size: 30px;font-family: 'Noto Sans TC', sans-serif;");
+                    },
+                    false
+                );
+
+                var box = document.getElementById('wrapper');
+                box.addEventListener("drop",
+                    function(e) {
+                        //取消默认浏览器拖拽效果
+                        e.preventDefault();
+                        var files = [];
+                        [].forEach.call(e.dataTransfer.files, function(file) {
+                            files.push(file);
+                        },false);
+
+                        for (let i = 0; i < files.length; i++) {
+                            let file = files[i];
+                            uploadFile(requestUrl,file,file.name,function (fileId) {
+                                //<div class="i-tag-wrapper"><button><i class="fa fa-times"></i></button><i class="fa fa-film display-item"></i><p>asdsdasdasd</p></div></div>
+                                var attachmentOutputArea = document.getElementById("attachment-wrapper");
+                                attachmentList.push(fileId);
+                                attachmentOutputArea.innerHTML = attachmentOutputArea.innerHTML + '<div id="' + fileId + '" class="i-tag-wrapper"><button onclick=\'removeAttachment("' + fileId +'")\'><i class="fa fa-times"></i></button><i class="fa fa-file display-item"></i><p>'+ file.name +'</p></div></div>';
+
+                            });
+                        }
+
+                    },
+                    false);
+
+//editor
+              tinymce.init({
+                        selector: '#mytextarea',
+                        width : 1200,
+                        height: 470,
+                        menubar: true,
+                        plugins: [
+                            'advlist autolink lists link image charmap print preview anchor',
+                            'searchreplace visualblocks fullscreen',
+                            'insertdatetime media table contextmenu code',
+                            'wordcount textcolor',
+                            "powerpaste"
+                        ],
+                        toolbar: 'undo redo | insert | styleselect | bold italic formatpainter permanentpen pageembed forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image |  code ',
+                        toolbar_drawer: 'sliding',
+                        permanentpen_properties: {
+                            fontname: 'arial,helvetica,sans-serif',
+                            forecolor: '#FF0000',
+                            fontsize: '50pt',
+                            hilitecolor: '',
+                            bold: true,
+                            italic: false,
+                            strikethrough: false,
+                            underline: false
+                        },
+                        table_toolbar: "tableprops cellprops tabledelete | tableinsertrowbefore tableinsertrowafter tabledeleterow | tableinsertcolbefore tableinsertcolafter tabledeletecol",
+                        powerpaste_allow_local_images: true,
+                        powerpaste_word_import: 'prompt',
+                        powerpaste_html_import: 'prompt',
+                        spellchecker_language: 'en',
+                        spellchecker_dialog: true,
+                        branding: false,
+                        paste_data_images: true,
+                        images_upload_handler: function (blobInfo, success, failure) {
+                            // no upload, just return the blobInfo.blob() as base64 data
+                            // alert(blobInfo.blob());
+                            // success("data:" + blobInfo.blob().type + ";base64," + blobInfo.base64());
+
+
+                           var id =  function create_UUID(){
+                                  var dt = new Date().getTime();
+                                      var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                                          var r = (dt + Math.random()*16)%16 | 0;
+                                          dt = Math.floor(dt/16);
+                                          return (c=='x' ? r :(r&0x3|0x8)).toString(16);
+                                      });
+                                      return uuid;
+                                  }
+              
+                            let filename = id() + ".png";
+
+                            uploadFile(requestUrl,blobInfo.blob(),filename,function (fileId){
+
+                                let imageUrl = fileDownloadUrl + fileId + ".png";
+                                success(imageUrl);
+
+                            },false);
+                            
+                        }
+                    });
+
+
+
+            }else {
+             alert("權限不足");
+            }
+        });
+
+        });
+
+    }
+    function updateArticle(articleId){
+
+        let headerTitle = document.getElementById("head-textarea").value;
+        let content = tinyMCE.activeEditor.getContent();
+        attachmentList = attachmentList.concat(oldAttachmentList);
+        let categoryId = categoryMap[document.getElementById("modifyCategoryList").value];
+
+
+        if (categoryId == null){
+            alert("分類不存在或空");
+            return ;
+        }
+
+        if (headerTitle.length < 1){
+            alert("標題不能為空");
+            return;
+        }
+        if (content.length < 1){
+            alert("內容不能為空");
+            return;
+        }
+
+
+        let data = {
+            "p1":articleId,
+            "p2":content,
+            "p3":headerTitle,
+            "p4":attachmentList.join(),
+            "p5":categoryId
+        }
+
+        doAjaxData(getJsonWithRequestWithMethod("modifyArticle",data),function (jsonData){
+
+            if (jsonData["status"] === 200) {
+                location.reload();
+            }else if(jsonData["status"] == 403){
+                alert("沒有權限");
+            }else{
+			alert("修改文章失敗");
+			}
+
+        });
+
+    }
+    function ReloadAndBack2ViewArticle(articleId){
+        location.reload();
+    }
+    function removeOldAttachment(htmlElement){
+
+        let attachmentId = htmlElement.getAttribute("eid");
+        let element = document.getElementById(attachmentId);
+        let index = oldAttachmentList.indexOf(attachmentId);
+        if (index > -1) {
+            oldAttachmentList.splice(index, 1);
+        }
+
+        element.remove();
+
+    }
+
+
+    //category
+    function viewArticleByCategoryId(id){
+        let data = {
+            "p1":id
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("getArticlesByCategory",data),function (response){
+
+            if (response["status"] == 200){
+                let data = response["data"];
+                outputArea.innerHTML = '<div class="content-title"><h2>類別名稱:</h2><h2 class="comment-h2">'+ data['categoryTitle'] + '</h2></div>';
+                let articles = data["articles"];
+
+                let articleOutputHTML = '<ul class="aticle-display-table">';
+
+                for (let i = 0; i < articles.length; i++) {
+                    let article = articles[i];
+
+                    let temp = ' <li onclick="viewArticle(' + article["articleId"] + ',\'viewArticleByCategoryId(' + id + ')\')" class="aticle-cell">' +
+                        '<div class="cell-right">' +
+                        '<h1>' +  article["articleTitle"] + '</h1>' +
+                        '<p>分類:' + data["categoryTitle"] + '</p>' +
+                        '<div class="cell-buttom"><p><i class="fa fa-comment"></i>留言:' + article["commentCount"] +'</p><p>發文日期:'+ article["articleDate"] +'</p><p>作者:'+ article["ownerName"] +'</p></div>' +
+                        '</div>' +
+                        '</li>';
+
+
+                    articleOutputHTML += temp;
+
+
+                }
+
+                articleOutputHTML += "</ul>";
+                outputArea.innerHTML += articleOutputHTML;
+            }else{
+                outputArea.innerHTML = '<h1>沒有任何文章</h1>';
+            }
+
+        });
+
+    }
+    function getAllCategories(){
+
+        doAjaxData(getJsonWithRequestWithMethod("getAllCategory"),function (response) {
+
+            if (response["status"] == 200){
+
+                outputArea.innerHTML = ' <div class="content-function-bar"><h1>項目管理</h1><div><button onclick="addCategoryHTMLTag()" class="modify"><i class="fa fa-plus"></i>增加分類</button></div></div>';
+
+                let categories = response["data"];
+                let categoriesHTML = '<div class="content-comment"><ul id="category-list" class="category-manage">';
+
+                for (let i = 0; i < categories.length; i++) {
+
+                    let categoryModel = categories[i];
+
+                    categoriesHTML += '<li id="category-li-' + categoryModel['categoryId'] + '"><div  id="category-' + categoryModel['categoryId'] + '" class="manage-left">' + categoryModel["categoryName"] + '</div><div class="manage-right"> <button onclick="change2ModifyMode(' + categoryModel['categoryId'] + ')" class="modify-caatergory"><i class="fa fa-pencil"></i>修改分類</button> <button onclick="removeCategory(' + categoryModel["categoryId"] + ')" class="remove-catergory"><i class="fa fa-times"></i>移除分類</button></div></li>';
+
+                }
+
+                categoriesHTML += '</ul></div>';
+                outputArea.innerHTML += categoriesHTML;
+
+            }else if(response["status"] == 201){
+			
+			   outputArea.innerHTML = ' <div class="content-function-bar"><h1>分類管理</h1><div><button onclick="addCategoryHTMLTag()" class="modify"><i class="fa fa-plus"></i>增加分類</button></div></div>';
+			   let categoriesHTML = '<div class="content-comment"><ul id="category-list" class="category-manage">';
+			    categoriesHTML += '</ul></div>';
+                outputArea.innerHTML += categoriesHTML;
+			
+		    }else {
+                outputArea.innerHTML = '<h1>權限不足</h1>';
+            }
+
+        });
+
+    }
+    function addCategoryHTMLTag(){
+        if (categoryAdded){
+           return ;
+        }
+        var categoryTable = document.getElementById('category-list');
+        categoryTable.innerHTML += '<li id="newCategoryList"><div class="manage-left"><textarea id="category-add"></textarea></div><div class="manage-right"> <button onclick="addCategory()" class="confirm-caatergory"><i class="fa fa-pencil"></i>確認增加</button> <button onclick="removeCategoryHTMLTag()" class="cancel-catergory"><i class="fa fa-times"></i>取消增加</button></div></li>';
+        categoryAdded = false;
+    }
+    function removeCategoryHTMLTag(){
+        var temp = document.getElementById("newCategoryList");
+        temp.remove();
+        categoryAdded = false;
+
+    }
+    function addCategory(){
+
+        var textArea = document.getElementById("category-add");
+
+        var categoryName = textArea.value;
+        if (categoryName.length == 0){
+            alert("分類名不能為空");
+        }
+
+        let data = {
+            "p1":categoryName
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("addCategory",data),function (response) {
+
+            if (response["status"] == 200){
+                removeCategoryHTMLTag();
+                initSideBar();
+                getAllCategories();
+            }else {
+                alert("增加分類失敗");
+            }
+
+
+        });
+
+
+    }
+    function updateCategory(categoryId){
+
+        let categoryTagId = "category-textarea-modify-" + categoryId;
+        let categoryTextHTMLElement = document.getElementById(categoryTagId);
+
+
+        let categoryText = categoryTextHTMLElement.value;
+
+        if (categoryText.length == 0){
+            alert("分類名稱不能為空");
+        }
+
+        let data = {
+            "p1":categoryId,
+            "p2":categoryText
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("modifyCategory",data),function (response){
+
+            if (response["status"] == 200){
+                alert("修改成功");
+                initSideBar();
+                updateCategoryListElement(categoryId,categoryText);
+
+            }else {
+                alert("權限不足");
+            }
+
+        });
+    }
+    function updateCategoryListElement(categoryId,categoryName){
+
+        let categoryLiTagId = "category-li-" + categoryId;
+        let categoryListHTMLElement = document.getElementById(categoryLiTagId);
+
+        categoryListHTMLElement.innerHTML = '<div  id="category-' + categoryId + '" class="manage-left">' + categoryName + '</div><div class="manage-right"> <button onclick="change2ModifyMode(' + categoryId + ')" class="modify-caatergory"><i class="fa fa-pencil"></i>修改分類</button> <button onclick="removeCategory(' + categoryId + ')" class="remove-catergory"><i class="fa fa-times"></i>移除分類</button></div>';
+
+    }
+    function change2ModifyMode(categoryId){
+
+        let categoryTagId = "category-" + categoryId;
+        let categoryLiTagId = "category-li-" + categoryId;
+        let categoryTextHTMLElement = document.getElementById(categoryTagId);
+        let categoryListHTMLElement = document.getElementById(categoryLiTagId);
+
+        let categoryText = categoryTextHTMLElement.innerText;
+
+        categoryListHTMLElement.innerHTML = '<div class="manage-left"><textarea id="category-textarea-modify-' + categoryId + '">' + categoryText + '</textarea></div><div class="manage-right"> <button onclick="updateCategory(' + categoryId + ')" class="confirm-caatergory"><i class="fa fa-pencil"></i>確認修改</button> <button onclick="updateCategoryListElement(' + categoryId + ',\'' + categoryText + '\')" class="cancel-catergory"><i class="fa fa-times"></i>取消修改</button></div>';
+
+
+    }
+    function removeCategory(categoryId){
+
+        let ask = confirm("確定要刪除分類？")
+        if (!ask){
+            return;
+        }
+
+        let data = {
+            "p1":categoryId
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("removeCategory",data),function (response) {
+
+            if (response["status"] == 200){
+                initSideBar();
+                getAllCategories();
+                alert("刪除成功");
+                categoryAdded = false;
+            }else {
+                alert("權限不足");
+            }
+
+        });
+
+    }
+
+    //recycleBin
+    function viewArticleInRecycleBin(){
+
+        doAjaxData(getJsonWithRequestWithMethod("getRubbishBinArticles"),function (response){
+
+            outputArea.innerHTML = "";
+            if (response["status"] == 200){
+
+                let articles = response["data"];
+
+                for (let i = 0; i < articles.length; i++) {
+                    let article = articles[i];
+
+                    let temp = ' <li class="aticle-cell">' +
+                        '<div class="cell-right">' +
+                        '<h1>' +  article["articleTitle"] + '</h1>' +
+                        '<p>分類:' + article["categoryName"] + '</p>' +
+                        '<div class="cell-buttom"><a onclick="recoverArticle(' + article["articleId"] + ')"  href="#">還原</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a onclick="completelyRemoveArticle('+ article["articleId"] +')" href="#">永久刪除</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<p><i class="fa fa-comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</i>留言:' + article["commentCount"] +'</p><p>發文日期:'+ article["articleDate"] +'</p><p>作者:'+ article["ownerName"] +'</p></div>' +
+                        '</div>' +
+                        '</li>';
+
+                    outputArea.innerHTML += temp;
+                }
+            }else {
+                outputArea.innerHTML = "<h1>回收桶沒有東西</h1>";
+            }
+        });
+
+    }
+    function completelyRemoveArticle(id){
+
+        let ask = confirm("確定要永久刪除?");
+        if (!ask){
+            return ;
+        }
+
+        var data = {"p1":id};
+
+        doAjaxData(getJsonWithRequestWithMethod("completelyRemoveArticle",data),function (response) {
+            viewArticleInRecycleBin();
+            if (response["status"] == 200){
+                alert("刪除成功");
+            }else {
+                alert("刪除失敗");
+            }
+
+        });
+
+    }
+    function recoverArticle(id){
+
+        let data = {
+            "p1":id
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("recoverFromRubbishBin",data),function (response) {
+            viewArticleInRecycleBin();
+            if (response["status"] == 200){
+                alert("還原成功");
+            }else {
+                alert("還原失敗");
+            }
+
+        });
+
+    }
+    function move2Bin(id){
+
+        let ask = confirm("確定要刪除文章?")
+        if (!ask){
+            return;
+        }
+
+        let data = {
+            "p1":id
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("removeArticleToRubbishBin",data),function (response) {
+
+            if (response["status"] == 200){
+                alert("刪除成功");
+                mainScreenButtonClick()
+            }else {
+                alert("刪除失敗");
+            }
+
+        });
+
+
+    }
+
+    //comment
+    function addComment2Article(articleId,from){
+        var textArea = document.getElementById("article-comment");
+
+        if (textArea.value.length == 0){
+            alert("留言不能為空");
+            return ;
+        }
+
+        let data = {
+          "p1":escapeHTML(textArea.value),
+           "p2":articleId
+        }
+
+        doAjaxData(getJsonWithRequestWithMethod('addComment',data),function (response){
+            if (response["status"] == 200){
+                alert("留言添加成功");
+                viewArticle(articleId,from);
+            }else if(response["status"] == 403){
+                alert("沒有權限");
+            }else{
+			    alert("留言添加失敗");
+			}
+
+        });
+
+
+
+    }
+    function getAllMyComment(){``
+
+        doAjaxData(getJsonWithRequestWithMethod("getAllSelfComments"),function (response) {
+
+            if (response["status"] == 200){
+
+
+                outputArea.innerHTML = '<div class="content-function-bar"><h1>我的留言</h1></div>';
+
+                let comments = response["data"]["comments"];
+                let commentsHTML = '<div class="content-comment"><ul class="comment-display-table">';
+                for (let i = 0; i < comments.length; i++) {
+
+                    commentsHTML += '<li onclick="viewArticle(' + comments[i]["articleId"] + ',\'getAllMyComment()\')">' +
+                        '<div class="cell-right">' +
+                        '<h1 class="cell-description-comment">' +  comments[i]["commentDescription"] + '</h1>' +
+                        '<p>留言日期:' + comments[i]["commentDate"] + ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 文章標題:' + comments[i]["articleTitle"] + ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 所屬類別:' + comments[i]["categoryTitle"] + '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a onclick="removeComment(' + comments[i]["commentId"] +'); event.stopPropagation();" href="#">刪除留言</a></p>' +
+                        '</div>' +
+                        '</li>';
+
+                }
+                commentsHTML += '</ul></div>';
+
+                outputArea.innerHTML += commentsHTML;
+
+            }else if(response["status"] == 201) {
+                outputArea.innerHTML = '<h1>您暫時還沒有留言</h1>';
+            }else {
+
+                alert("權限不足或加載錯誤");
+            }
+
+        });
+
+    }
+    function removeComment(commentId){
+
+        let ask = confirm("確定要刪除留言?")
+        if (!ask){
+            return ;
+        }
+
+        let data = {
+            "p1":commentId
+        };
+
+        doAjaxData(getJsonWithRequestWithMethod("removeComment",data),function (response) {
+
+            if (response["status"] == 200){
+                alert("刪除成功");
+                getAllMyComment();
+            }else {
+                alert("權限不足");
+            }
+
+
+        });
+
+    }
+
+    //search
+    function search(keyword){
+        var barValue = document.getElementById("search");
+      keyword = barValue.value;
+
+      let data = {
+          "p1":keyword
+      };
+
+      doAjaxData(getJsonWithRequestWithMethod("search",data),function (response) {
+
+          if (response["status"] == 200){
+
+              let result = response["data"];
+              outputArea.innerHTML = '<div class="content-title"><h2>搜尋結果:</h2><h2 class="gray-h2">' + result["keyword"] + '</h2></div>';
+
+              //category
+              let categoryHTML = '<div class="content-comment"><h1>項目</h1><ul class="category-comment">';
+              let categoryModels = result["categories"];
+
+              for (let i = 0; i < categoryModels.length; i++) {
+                  let categoryModel = categoryModels[i];
+                  categoryHTML += '<li onclick="viewArticleByCategoryId(' + categoryModel["categoryId"] + ')">' + categoryModel["categoryTitle"] + '</li>';
+              }
+              categoryHTML += '</ul></div>';
+              outputArea.innerHTML += categoryHTML;
+
+              //article
+              let articleHTML = '<div class="content-comment"><h1>文章</h1><ul class="aticle-display-table">';
+              let articleModels = result["articles"];
+
+              for (let i = 0; i < articleModels.length; i++) {
+                  let articleModel = articleModels[i];
+                  articleHTML+= '<li onclick="viewArticle(' + articleModel["articleId"] + ',\'search()\')" class="aticle-cell"><div class="cell-right" style="width: 100%">' +
+                      '<h1>' + articleModel["articleTitle"] + '</h1>' +
+                      '<p>分類:' + articleModel["categoryTitle"] + '</p>' +
+                      '<div class="cell-buttom"><p>發文日期:' + articleModel["articleDate"] + '</p></div>' +
+                      '</div>' +
+                      '</li>';
+
+              }
+
+              articleHTML += '</ul></div>';
+              outputArea.innerHTML += articleHTML;
+
+              //comment
+              let commentHTML = '<div class="content-comment"><h1>留言</h1><ul class="comment-display-table">';
+              let commentsModels = result["comments"];
+              for (let i = 0; i < commentsModels.length; i++) {
+                  let comment = commentsModels[i];
+                  commentHTML += '<li onclick="viewArticle(' + comment["articleId"] + ',\'search()\')" >' +
+                      '<div class="cell-right"  style="width: 100%">' +
+                      '<h1 class="cell-description-comment">' + comment["commentDescription"] + '</h1>' +
+                      '<p>留言日期:' + comment["commentDate"] + ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 文章標題:' + comment["articleTitle"] + ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 所屬類別:' + comment["categoryTitle"] + ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 留言人:' + comment["commentOwner"] + '</p>' +
+                      '</div>' +
+                      '</li>';
+              }
+              commentHTML += '</ul></div>';
+              outputArea.innerHTML += commentHTML;
+
+          }else {
+            outputArea.innerHTML = "<h1>找不到結果:" + keyword + " </h1>"
+          }
+      })
+
+
+
+    }
+
+
+    //custom functions
+    function escapeHTML(text) {
+        var map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+    function outDocs(){
+        let dataDiv = document.getElementById("page-content-wrapper");
+        let outDiv = document.getElementById("out_docs");
+        outDiv.innerHTML = dataDiv.innerHTML;
+        //remove button and other element
+        outDiv = document.getElementById("out_docs");
+        let removes = outDiv.getElementsByClassName("docnone");
+        for (let i = 0;i < removes.length; i++){
+            removes[i].remove();
+        }
+        removes = outDiv.getElementsByClassName("docnone");
+        for (let i = 0;i < removes.length; i++){
+            removes[i].remove();
+        }
+        removes = outDiv.getElementsByClassName("docnone");
+        for (let i = 0;i < removes.length; i++){
+            removes[i].remove();
+        }
+        removes = outDiv.getElementsByClassName("docnone");
+        for (let i = 0;i < removes.length; i++){
+            removes[i].remove();
+        }
+        removes = outDiv.getElementsByClassName("docnone");
+        for (let i = 0;i < removes.length; i++){
+            removes[i].remove();
+        }
+        var d = new Date();
+
+        $(document).ready(function() {
+            var o = {
+                filename: formatDate(d, "dddd_h_mm_tt_d_MMM_yyyy") + ".doc"
+            };
+            $(document).googoose(o);
+        });
+    }
+    function sharePages(aid){
+        var URL = "article.php?aid=" + aid;
+        var win = window.open(URL);
+    }
+    function setupNowWeatherInfo(callback){
+        $.ajax({
+            url: "https://new-api.smg.gov.mo/weather_v2?selection=allweather&lang=c",
+            type: "POST",
+            success:function (data) {
+                data = JSON.parse(data["c_actualweather"]);
+
+                callback(data["ActualWeather"]["Custom"][0]["WeatherReport"][2]["station"][0]["Temperature"][0]["dValue"]+"°C" );
+            }
+        });
+    }
+    function formatDate(date, format, utc) {
+        var MMMM = ["\x00", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        var MMM = ["\x01", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        var dddd = ["\x02", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        var ddd = ["\x03", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+        function ii(i, len) {
+            var s = i + "";
+            len = len || 2;
+            while (s.length < len) s = "0" + s;
+            return s;
+        }
+
+        var y = utc ? date.getUTCFullYear() : date.getFullYear();
+        format = format.replace(/(^|[^\\])yyyy+/g, "$1" + y);
+        format = format.replace(/(^|[^\\])yy/g, "$1" + y.toString().substr(2, 2));
+        format = format.replace(/(^|[^\\])y/g, "$1" + y);
+
+        var M = (utc ? date.getUTCMonth() : date.getMonth()) + 1;
+        format = format.replace(/(^|[^\\])MMMM+/g, "$1" + MMMM[0]);
+        format = format.replace(/(^|[^\\])MMM/g, "$1" + MMM[0]);
+        format = format.replace(/(^|[^\\])MM/g, "$1" + ii(M));
+        format = format.replace(/(^|[^\\])M/g, "$1" + M);
+
+        var d = utc ? date.getUTCDate() : date.getDate();
+        format = format.replace(/(^|[^\\])dddd+/g, "$1" + dddd[0]);
+        format = format.replace(/(^|[^\\])ddd/g, "$1" + ddd[0]);
+        format = format.replace(/(^|[^\\])dd/g, "$1" + ii(d));
+        format = format.replace(/(^|[^\\])d/g, "$1" + d);
+
+        var H = utc ? date.getUTCHours() : date.getHours();
+        format = format.replace(/(^|[^\\])HH+/g, "$1" + ii(H));
+        format = format.replace(/(^|[^\\])H/g, "$1" + H);
+
+        var h = H > 12 ? H - 12 : H == 0 ? 12 : H;
+        format = format.replace(/(^|[^\\])hh+/g, "$1" + ii(h));
+        format = format.replace(/(^|[^\\])h/g, "$1" + h);
+
+        var m = utc ? date.getUTCMinutes() : date.getMinutes();
+        format = format.replace(/(^|[^\\])mm+/g, "$1" + ii(m));
+        format = format.replace(/(^|[^\\])m/g, "$1" + m);
+
+        var s = utc ? date.getUTCSeconds() : date.getSeconds();
+        format = format.replace(/(^|[^\\])ss+/g, "$1" + ii(s));
+        format = format.replace(/(^|[^\\])s/g, "$1" + s);
+
+        var f = utc ? date.getUTCMilliseconds() : date.getMilliseconds();
+        format = format.replace(/(^|[^\\])fff+/g, "$1" + ii(f, 3));
+        f = Math.round(f / 10);
+        format = format.replace(/(^|[^\\])ff/g, "$1" + ii(f));
+        f = Math.round(f / 10);
+        format = format.replace(/(^|[^\\])f/g, "$1" + f);
+
+        var T = H < 12 ? "AM" : "PM";
+        format = format.replace(/(^|[^\\])TT+/g, "$1" + T);
+        format = format.replace(/(^|[^\\])T/g, "$1" + T.charAt(0));
+
+        var t = T.toLowerCase();
+        format = format.replace(/(^|[^\\])tt+/g, "$1" + t);
+        format = format.replace(/(^|[^\\])t/g, "$1" + t.charAt(0));
+
+        var tz = -date.getTimezoneOffset();
+        var K = utc || !tz ? "Z" : tz > 0 ? "+" : "-";
+        if (!utc) {
+            tz = Math.abs(tz);
+            var tzHrs = Math.floor(tz / 60);
+            var tzMin = tz % 60;
+            K += ii(tzHrs) + ":" + ii(tzMin);
+        }
+        format = format.replace(/(^|[^\\])K/g, "$1" + K);
+
+        var day = (utc ? date.getUTCDay() : date.getDay()) + 1;
+        format = format.replace(new RegExp(dddd[0], "g"), dddd[day]);
+        format = format.replace(new RegExp(ddd[0], "g"), ddd[day]);
+
+        format = format.replace(new RegExp(MMMM[0], "g"), MMMM[M]);
+        format = format.replace(new RegExp(MMM[0], "g"), MMM[M]);
+
+        format = format.replace(/\\(.)/g, "$1");
+
+        return format;
+    };
+
+</script>
+
+
+<script type="text/javascript" src="javascript/jquery-3.5.1.slim.min.js"></script>
+<script type="text/javascript" src="javascript/tinymce/tinymce.min.js"></script>
+<script type="text/javascript" src="javascript/base64.min.js"></script>
+<script type="text/javascript" src="javascript/docs.js"></script>
+
+
+
+</html>
